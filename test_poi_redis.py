@@ -104,6 +104,12 @@ def note(text):
     NOTES.append(text)
 
 
+def show(text):
+    """พิมพ์ออกจอทันทีระหว่างที่เทสต์ยังทำงานอยู่ ต่างจาก note ที่พิมพ์เมื่อเทสต์จบ"""
+    print(text)
+    sys.stdout.flush()
+
+
 # ---------------------------------------------------------------- กลุ่ม offline
 
 @test("รหัสจังหวัด DOPA มี 77 จังหวัดและมีบึงกาฬเป็น 38", "offline")
@@ -480,8 +486,14 @@ def t_sample_twenty(ctx):
     lookup = PoiLookup(url=ctx.url)
     found = 0
     elapsed = []
-    note("%-3s %-11s %-10s %-4s %s"
-         % ("ที่", "longitude", "latitude", "จว.", "ผลการ lookup"))
+
+    # ตารางนี้พิมพ์ออกจอทันทีขณะค้นหา ไม่รอให้เทสต์จบเหมือนบรรทัดหมายเหตุอื่น
+    show("")
+    show("-" * 78)
+    show("ผลการ lookup จุดสุ่ม 20 จุด  รัศมี %s กิโลเมตร" % lookup.radius_km)
+    show("-" * 78)
+    show("%3s %12s %11s %4s  %s"
+         % ("ที่", "longitude", "latitude", "จว.", "สถานที่ ถนน จังหวัด"))
     for order, (member, raw) in enumerate(rows, 1):
         row = json.loads(raw)
         # ขยับพิกัดไม่เกินประมาณ 200 เมตร เพื่อให้เป็นการค้นจากจุดที่ไม่ตรงกับระเบียนพอดี
@@ -491,15 +503,16 @@ def t_sample_twenty(ctx):
         poi = lookup.nearest(lat, lon)
         elapsed.append(time.time() - start)
         if poi is None:
-            note("%3d %11.6f %10.6f  -   ไม่พบจุดในรัศมี %s กิโลเมตร"
-                 % (order, lon, lat, lookup.radius_km))
+            show("%3d %12.6f %11.6f %4s  ไม่พบจุดในรัศมี" % (order, lon, lat, "-"))
             continue
         found += 1
-        note("%3d %11.6f %10.6f %4s  %s"
+        show("%3d %12.6f %11.6f %4s  %s"
              % (order, lon, lat, to_dlt_province(poi["province_code"]),
                 lookup.address(poi)))
-    note("พบ %d จาก 20 จุด  เวลาค้นหาเฉลี่ย %.1f มิลลิวินาที"
-         % (found, sum(elapsed) / len(elapsed) * 1000.0))
+    show("-" * 78)
+    show("พบ %d จาก 20 จุด  เวลาค้นหาเฉลี่ย %.1f มิลลิวินาที  สูงสุด %.1f มิลลิวินาที"
+         % (found, sum(elapsed) / len(elapsed) * 1000.0, max(elapsed) * 1000.0))
+    show("")
     ok(found >= 18, "ควรพบจุดอย่างน้อย 18 จาก 20 แต่พบ %d" % found)
 
 
