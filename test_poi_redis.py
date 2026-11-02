@@ -472,6 +472,37 @@ def t_round_trip(ctx):
            "รหัสจังหวัดของจุดที่ค้นจากพิกัดของระเบียน %s" % member)
 
 
+@test("สุ่ม 20 จุดแล้วแสดงผลการ lookup")
+def t_sample_twenty(ctx):
+    rows = _as_pairs(ctx.conn.hrandfield("poi:rows", 20, withvalues=True))
+    eq(len(rows), 20, "จำนวนจุดที่สุ่มได้")
+
+    lookup = PoiLookup(url=ctx.url)
+    found = 0
+    elapsed = []
+    note("%-3s %-11s %-10s %-4s %s"
+         % ("ที่", "longitude", "latitude", "จว.", "ผลการ lookup"))
+    for order, (member, raw) in enumerate(rows, 1):
+        row = json.loads(raw)
+        # ขยับพิกัดไม่เกินประมาณ 200 เมตร เพื่อให้เป็นการค้นจากจุดที่ไม่ตรงกับระเบียนพอดี
+        lat = float(row["y"]) + random.uniform(-0.002, 0.002)
+        lon = float(row["x"]) + random.uniform(-0.002, 0.002)
+        start = time.time()
+        poi = lookup.nearest(lat, lon)
+        elapsed.append(time.time() - start)
+        if poi is None:
+            note("%3d %11.6f %10.6f  -   ไม่พบจุดในรัศมี %s กิโลเมตร"
+                 % (order, lon, lat, lookup.radius_km))
+            continue
+        found += 1
+        note("%3d %11.6f %10.6f %4s  %s"
+             % (order, lon, lat, to_dlt_province(poi["province_code"]),
+                lookup.address(poi)))
+    note("พบ %d จาก 20 จุด  เวลาค้นหาเฉลี่ย %.1f มิลลิวินาที"
+         % (found, sum(elapsed) / len(elapsed) * 1000.0))
+    ok(found >= 18, "ควรพบจุดอย่างน้อย 18 จาก 20 แต่พบ %d" % found)
+
+
 # ---------------------------------------------------------------------- ตัวช่วย
 
 class Context(object):
