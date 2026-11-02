@@ -20,8 +20,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import poi_lookup
-from poi_lookup import PoiLookup, to_dlt_province
+from poi_lookup import PoiLookup, connect, to_dlt_province
 
 DEFAULT_URL = "redis://redis-poi:6379/0"
 
@@ -30,20 +29,6 @@ THAI_BBOX = {"lat_min": 5.6, "lat_max": 20.5, "lon_min": 97.3, "lon_max": 105.7}
 
 # ระยะที่ขยับพิกัดในโหมด poi ประมาณ 200 เมตร
 JITTER_DEG = 0.002
-
-
-def connect(url):
-    if poi_lookup.redis is None:
-        return None, "ยังไม่ได้ติดตั้งไลบรารี redis ให้สั่ง pip install redis"
-    try:
-        conn = poi_lookup.redis.Redis.from_url(
-            url, decode_responses=True,
-            socket_timeout=5.0, socket_connect_timeout=5.0,
-        )
-        conn.ping()
-        return conn, None
-    except Exception as exc:
-        return None, "%s %s" % (type(exc).__name__, exc)
 
 
 def sample_points(conn, count, mode):
@@ -70,18 +55,25 @@ def describe(conn, lookup, lat, lon):
         return result
 
     # ขอรหัสจุดกับระยะห่างมาแสดง เพราะ nearest() คืนเฉพาะข้อมูลที่ใช้งานต่อ
-    found = conn.geosearch("poi:geo", longitude=lon, latitude=lat,
-                           radius=lookup.radius_km, unit="km",
-                           sort="ASC", count=1, withdist=True)
-    if found:
-        result["member"] = found[0][0]
-        result["dist_km"] = float(found[0][1])
-        row = json.loads(conn.hget("poi:rows", result["member"]))
-        result["code_name"] = conn.hget("poi:code_names", row["poiCode"])
-        result["local_name"] = conn.hget("poi:local_code_names", row["localCode"])
-        # brandId เป็น 0 หมายถึงไม่มีแบรนด์ ไม่ใช่รหัสที่ต้องนำไปค้นหา
-        if row["brandId"] != "0":
-            result["brand_name"] = conn.hget("poi:brand_names", row["brandId"])
+    # ครอบด้วย try เพื่อให้บริการที่ล่มกลางทางไม่ล้มทั้งรายงาน เหมือนที่ตัวรัน
+    # ของชุดทดสอบครอบทุกเทสต์ไว้
+    try:
+        found = conn.geosearch("poi:geo", longitude=lon, latitude=lat,
+                               radius=lookup.radius_km, unit="km",
+                               sort="ASC", count=1, withdist=True)
+        if found:
+            result["member"] = found[0][0]
+            result["dist_km"] = float(found[0][1])
+            row = json.loads(conn.hget("poi:rows", result["member"]))
+            result["code_name"] = conn.hget("poi:code_names", row["poiCode"])
+            result["local_name"] = conn.hget("poi:local_code_names",
+                                             row["localCode"])
+            # brandId เป็น 0 หมายถึงไม่มีแบรนด์ ไม่ใช่รหัสที่ต้องนำไปค้นหา
+            if row["brandId"] != "0":
+                result["brand_name"] = conn.hget("poi:brand_names",
+                                                 row["brandId"])
+    except Exception as exc:
+        result["error"] = "%s %s" % (type(exc).__name__, exc)
     return result
 
 
@@ -94,8 +86,9 @@ def print_compact(results, lookup):
             print("%3d %11.6f %10.6f %8s %4s  ไม่พบจุดสนใจในรัศมี %s กิโลเมตร"
                   % (order, item["lon"], item["lat"], "-", "-", lookup.radius_km))
             continue
-        print("%3d %11.6f %10.6f %8.3f %4s  %s"
-              % (order, item["lon"], item["lat"], item.get("dist_km", 0.0),
+        dist = ("%8.3f" % item["dist_km"]) if "dist_km" in item else "%8s" % "-"
+        print("%3d %11.6f %10.6f %s %4s  %s"
+              % (order, item["lon"], item["lat"], dist,
                  to_dlt_province(item["poi"]["province_code"]),
                  lookup.address(item["poi"])))
 
@@ -109,8 +102,10 @@ def print_detail(results, lookup):
             continue
         poi = item["poi"]
         dopa = poi["province_code"]
-        print("     จุดที่พบ     %s  (รหัสจุด %s  ห่าง %.3f กิโลเมตร)"
-              % (poi["name"], item.get("member", "-"), item.get("dist_km", 0.0)))
+        dist = ("ห่าง %.3f กิโลเมตร" % item["dist_km"]
+                if "dist_km" in item else "ไม่ทราบระยะห่าง")
+        print("     จุดที่พบ     %s  (รหัสจุด %s  %s)"
+              % (poi["name"], item.get("member", "-"), dist))
         print("     ที่อยู่       %s" % lookup.address(poi))
         print("     ประเภท      %s / %s"
               % (item.get("code_name") or "-", item.get("local_name") or "-"))
@@ -118,6 +113,8 @@ def print_detail(results, lookup):
             print("     แบรนด์      %s" % item["brand_name"])
         print("     จังหวัด      %s   รหัส DOPA %s   รหัสกรมการขนส่งทางบก %s"
               % (poi["province"], dopa, to_dlt_province(dopa)))
+        if item.get("error"):
+            print("     อ่านรายละเอียดเพิ่มไม่ได้  %s" % item["error"])
         print("")
 
 
@@ -128,9 +125,15 @@ def print_summary(results, lookup):
     if not found:
         return
 
-    dists = sorted(item.get("dist_km", 0.0) for item in found)
-    print("ระยะห่าง  ใกล้สุด %.3f  มัธยฐาน %.3f  ไกลสุด %.3f กิโลเมตร"
-          % (dists[0], dists[len(dists) // 2], dists[-1]))
+    dists = sorted(item["dist_km"] for item in found if "dist_km" in item)
+    if dists:
+        print("ระยะห่าง  ใกล้สุด %.3f  มัธยฐาน %.3f  ไกลสุด %.3f กิโลเมตร"
+              % (dists[0], dists[len(dists) // 2], dists[-1]))
+
+    errors = [item for item in results if item.get("error")]
+    if errors:
+        print("อ่านรายละเอียดเพิ่มไม่ได้ %d จุด  ตัวอย่าง %s"
+              % (len(errors), errors[0]["error"]))
 
     counts = {}
     for item in found:

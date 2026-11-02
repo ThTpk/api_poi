@@ -20,10 +20,10 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import poi_lookup
 from poi_lookup import (
     DOPA_PROVINCES,
     PoiLookup,
+    connect,
     province_code_from_admin_id,
     to_dlt_province,
 )
@@ -533,20 +533,6 @@ def _as_pairs(raw):
     if isinstance(raw[0], (list, tuple)):
         return [tuple(item) for item in raw]
     return list(zip(raw[0::2], raw[1::2]))
-
-
-def connect(url):
-    if poi_lookup.redis is None:
-        return None, "ยังไม่ได้ติดตั้งไลบรารี redis ให้สั่ง pip install redis"
-    try:
-        conn = poi_lookup.redis.Redis.from_url(
-            url, decode_responses=True,
-            socket_timeout=5.0, socket_connect_timeout=5.0,
-        )
-        conn.ping()
-        return conn, None
-    except Exception as exc:
-        return None, "%s %s" % (type(exc).__name__, exc)
 
 
 def main(argv=None):

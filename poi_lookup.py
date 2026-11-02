@@ -46,6 +46,12 @@ DEFAULT_RADIUS_KM = 1.2
 DEFAULT_CACHE_MAX = 50000
 CACHE_PRECISION = 3  # ปัดพิกัดเป็นทศนิยม 3 ตำแหน่ง ได้ช่องประมาณ 110 เมตร
 
+# เวลารอของการเชื่อมต่อที่โปรแกรมเรียกใช้โดยตรงผ่าน connect()
+DEFAULT_TIMEOUT = 5.0
+# เวลารอของคอนเนกชันภายใน PoiLookup ซึ่งสั้นกว่า เพราะการค้นหาที่ช้าเกิน
+# เท่ากับคืนค่าว่างอยู่แล้วตามหัวข้อ 6 ของคู่มือ จึงไม่ควรถ่วงผู้เรียก
+LOOKUP_TIMEOUT = 2.0
+
 
 def to_dlt_province(code):
     """แปลงรหัสจังหวัด DOPA เป็นรหัสของกรมการขนส่งทางบก"""
@@ -67,6 +73,26 @@ def province_code_from_admin_id(admin_id):
         return None
     code = int(text[:2])
     return code if code in DOPA_PROVINCES else None
+
+
+def connect(url, timeout=DEFAULT_TIMEOUT):
+    """คืนคู่ของตัวเชื่อมต่อกับข้อความผิดพลาด โดยทดสอบด้วย PING ก่อนคืน
+
+    ใช้ร่วมกันทั้งชุดทดสอบและโปรแกรมแสดงผล เพื่อให้ทั้งสองเชื่อมต่อด้วยค่า
+    ชุดเดียวกัน ต่างจาก PoiLookup.client() ที่รอสั้นกว่าและกลืนข้อผิดพลาด
+    ทั้งหมดตามหัวข้อ 6 ของคู่มือ
+    """
+    if redis is None:
+        return None, "ยังไม่ได้ติดตั้งไลบรารี redis ให้สั่ง pip install redis"
+    try:
+        conn = redis.Redis.from_url(
+            url, decode_responses=True,
+            socket_timeout=timeout, socket_connect_timeout=timeout,
+        )
+        conn.ping()
+        return conn, None
+    except Exception as exc:
+        return None, "%s %s" % (type(exc).__name__, exc)
 
 
 class PoiLookup:
@@ -100,7 +126,8 @@ class PoiLookup:
             try:
                 self._client = redis.Redis.from_url(
                     self.url, decode_responses=True,
-                    socket_timeout=2.0, socket_connect_timeout=2.0,
+                    socket_timeout=LOOKUP_TIMEOUT,
+                    socket_connect_timeout=LOOKUP_TIMEOUT,
                 )
             except Exception:
                 self.stats["errors"] += 1
