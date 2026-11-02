@@ -550,6 +550,13 @@ def connect(url):
 
 
 def main(argv=None):
+    # ตั้งก่อนสร้างตัวแยกอาร์กิวเมนต์ เพราะคอนโซลของ Windows ตั้งต้นเป็นรหัส
+    # อักขระที่พิมพ์ภาษาไทยไม่ได้ และ --help พิมพ์ออกจอทันทีที่แยกอาร์กิวเมนต์
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(description="ทดสอบการทำงานของ POI Redis")
     parser.add_argument("--url",
                         default=os.environ.get("POI_REDIS_URL") or DEFAULT_URL,
@@ -561,12 +568,6 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     random.seed()
-    # คอนโซลของ Windows ตั้งต้นเป็นรหัสอักขระที่พิมพ์ภาษาไทยไม่ได้
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
-
     print("ทดสอบ POI Redis ที่ %s" % args.url)
     print("=" * 78)
 
