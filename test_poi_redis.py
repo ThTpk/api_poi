@@ -3,7 +3,7 @@
 
 วิธีใช้
     python test_poi_redis.py
-    python test_poi_redis.py --url redis://redis-poi:6379/0
+    python test_poi_redis.py --url redis://10.105.0.13:31379/0
     python test_poi_redis.py --quick        ข้ามการทดสอบที่ใช้เวลานาน
     python test_poi_redis.py --offline      รันเฉพาะส่วนที่ไม่ต้องมี Redis
 
@@ -28,7 +28,7 @@ from poi_lookup import (
     to_dlt_province,
 )
 
-DEFAULT_URL = "redis://redis-poi:6379/0"
+DEFAULT_URL = "redis://10.105.0.13:31379/0"
 DATA_VERSION = "2026-10"
 
 # จำนวนสมาชิกที่คู่มือหัวข้อ 2 ระบุไว้

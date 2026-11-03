@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from poi_lookup import PoiLookup, connect, to_dlt_province
 
-DEFAULT_URL = "redis://redis-poi:6379/0"
+DEFAULT_URL = "redis://10.105.0.13:31379/0"
 
 # กรอบพิกัดของประเทศไทยโดยประมาณ ใช้กับโหมด bbox
 THAI_BBOX = {"lat_min": 5.6, "lat_max": 20.5, "lon_min": 97.3, "lon_max": 105.7}
